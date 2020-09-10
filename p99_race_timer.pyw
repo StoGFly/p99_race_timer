@@ -127,8 +127,10 @@ class MainWindow(QMainWindow):
     
     def select_log(self):
         dialog_file = QFileDialog.getOpenFileName(self, 'Open Log', '.', '*.txt')
-        self.selected_file = pathlib.Path(dialog_file[0])
-        if self.selected_file:
+        self.selected_file = None
+        if dialog_file[0]:
+            self.selected_file = pathlib.Path(dialog_file[0])
+        if self.selected_file is not None:
             fp = open(self.selected_file, 'r')
             while True:
                 line = fp.readline()
@@ -137,8 +139,8 @@ class MainWindow(QMainWindow):
                 else:
                     print('done reading file')
                     break
-        self.parser_thread.fp = fp
-        self.parser_thread.start()
+            self.parser_thread.fp = fp
+            self.parser_thread.start()
 
 if __name__ == '__main__':
     import sys
