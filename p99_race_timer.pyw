@@ -1,12 +1,14 @@
 #!python3
+import re
+import pathlib
+import time
+import winsound
+from datetime import datetime, timezone
 from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QAction,
                              QFileDialog, QVBoxLayout, QWidget, QHBoxLayout,
                              QPushButton)
-from PyQt5.QtCore import QThread, pyqtSignal
-import pathlib
-from datetime import datetime, timezone
-import re
-import winsound
+from PyQt5.QtCore import QThread, pyqtSignal, QFileSystemWatcher
+
 
 class ParserThread(QThread):
     roll_signal = pyqtSignal(int, datetime)
@@ -15,8 +17,19 @@ class ParserThread(QThread):
     def __init__(self):
         super().__init__()
         self.fp = None
+        self.log_path = None
+        self.fs_watcher = QFileSystemWatcher()
 
     def run(self):
+        if self.log_path is not None:
+            self.fs_watcher.addPath(str(self.log_path))
+            self.fs_watcher.fileChanged.connect(self.handle_line)
+        # infinite loop can now sleep and wait for signal from file system watcher.
+        while True:
+            time.sleep(1)
+
+    # Triggers when the log file is modified. Reads until all lines are consumed then return.
+    def handle_line(self, path):
         roll_pattern = r'\[.+?(?=\])] \*\*It could have been any number from 0 to 1000, but this time it turned up a (\d{1,4}).'
         fte_pattern = r'\[.+?(?=\])] (.+?(?=engages))engages ([a-zA-Z]+)'
         while True:
@@ -33,7 +46,7 @@ class ParserThread(QThread):
                     now = datetime.now(timezone.utc)
                     self.fte_signal.emit(fte_match.group(1), fte_match.group(2), now)
             else:
-                continue
+                return
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -132,14 +145,10 @@ class MainWindow(QMainWindow):
             self.selected_file = pathlib.Path(dialog_file[0])
         if self.selected_file is not None:
             fp = open(self.selected_file, 'r')
-            while True:
-                line = fp.readline()
-                if line:
-                    continue
-                else:
-                    print('done reading file')
-                    break
+            # Moves file pointer to end of file.
+            fp.seek(0, 2)
             self.parser_thread.fp = fp
+            self.parser_thread.log_path = self.selected_file
             self.parser_thread.start()
 
 if __name__ == '__main__':
