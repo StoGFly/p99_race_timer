@@ -13,6 +13,8 @@ from PyQt5.QtCore import QThread, pyqtSignal, QFileSystemWatcher
 class ParserThread(QThread):
     roll_signal = pyqtSignal(int, datetime)
     fte_signal = pyqtSignal(str, str, datetime)
+    load_start_signal = pyqtSignal(datetime)
+    load_end_signal = pyqtSignal(datetime, str)
 
     def __init__(self):
         super().__init__()
@@ -32,6 +34,8 @@ class ParserThread(QThread):
     def handle_line(self, path):
         roll_pattern = r'\[.+?(?=\])] \*\*It could have been any number from 0 to 1000, but this time it turned up a (\d{1,4}).'
         fte_pattern = r'\[.+?(?=\])] (.+?(?=engages))engages ([a-zA-Z]+)'
+        load_start_pattern = r'\[.+?(?=\])] LOADING, PLEASE WAIT\.\.\.'
+        load_end_pattern = r'\[.+?(?=\])] You have entered (.+?(?=\.)).'
         while True:
             line = self.fp.readline()
             if line:
@@ -45,6 +49,14 @@ class ParserThread(QThread):
                 if fte_match:
                     now = datetime.now(timezone.utc)
                     self.fte_signal.emit(fte_match.group(1), fte_match.group(2), now)
+                load_start_match = re.match(load_start_pattern, line)
+                if load_start_match:
+                    now = datetime.now(timezone.utc)
+                    self.load_start_signal.emit(now)
+                load_end_match = re.match(load_end_pattern, line)
+                if load_end_match:
+                    now = datetime.now(timezone.utc)
+                    self.load_end_signal.emit(now, load_end_match.group(1))
             else:
                 return
 
@@ -63,6 +75,8 @@ class MainWindow(QMainWindow):
         self.parser_thread = ParserThread()
         self.parser_thread.roll_signal.connect(self.valid_roll)
         self.parser_thread.fte_signal.connect(self.valid_fte)
+        self.parser_thread.load_start_signal.connect(self.valid_load_start)
+        self.parser_thread.load_end_signal.connect(self.valid_load_end)
 
         roll_label = QLabel("Roll:")
         self.roll = QLabel('-')
@@ -76,12 +90,24 @@ class MainWindow(QMainWindow):
         self.overall_time = QLabel('Time:')
         self.overall_time_value = QLabel('-')
 
+        load_start_label = QLabel("Load Start:")
+        self.load_start = QLabel('-')
+
+        load_end_label = QLabel("Load End:")
+        self.zone_loaded = QLabel('-')
+        self.load_end = QLabel('-')
+
+        overall_load_time = QLabel('Load Time:')
+        self.overall_load_time_value = QLabel('-')
+
         self.reset_button = QPushButton('Reset')
         self.reset_button.clicked.connect(self.on_reset_click)
 
         self.started = False
         self.fted = False
         self.started_time = None
+        self.load_started = False
+        self.load_started_time = None
 
         first_row = QHBoxLayout()
         first_row.addWidget(roll_label)
@@ -99,13 +125,29 @@ class MainWindow(QMainWindow):
         third_row.addWidget(self.overall_time_value)
 
         fourth_row = QHBoxLayout()
-        fourth_row.addWidget(self.reset_button)
+        fourth_row.addWidget(load_start_label)
+        fourth_row.addWidget(self.load_start)
+
+        fifth_row = QHBoxLayout()
+        fifth_row.addWidget(load_end_label)
+        fifth_row.addWidget(self.zone_loaded)
+        fifth_row.addWidget(self.load_end)
+
+        sixth_row = QHBoxLayout()
+        sixth_row.addWidget(overall_load_time)
+        sixth_row.addWidget(self.overall_load_time_value)
+
+        seventh_row = QHBoxLayout()
+        seventh_row.addWidget(self.reset_button)
 
         layout = QVBoxLayout()
         layout.addLayout(first_row)
         layout.addLayout(second_row)
         layout.addLayout(third_row)
         layout.addLayout(fourth_row)
+        layout.addLayout(fifth_row)
+        layout.addLayout(sixth_row)
+        layout.addLayout(seventh_row)
         
         widget = QWidget()
         widget.setLayout(layout)
@@ -127,6 +169,21 @@ class MainWindow(QMainWindow):
             time_diff = fte_time - self.started_time
             self.overall_time_value.setText(str(time_diff))
 
+    def valid_load_start(self, load_time):
+        if not self.load_started:
+            self.load_started = True
+            self.load_started_time = load_time
+            self.load_start.setText(load_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
+
+    def valid_load_end(self, load_time, zone_loaded):
+        if self.load_started:
+            self.zone_loaded.setText(zone_loaded)
+            self.load_end.setText(load_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
+            time_diff = load_time - self.load_started_time
+            self.overall_load_time_value.setText(str(time_diff))
+
+            
+
     def on_reset_click(self):
         self.fted = False
         self.started = False
@@ -137,6 +194,13 @@ class MainWindow(QMainWindow):
         self.fte_time.setText('-')
         self.overall_time_value.setText('-')
         self.started_time = None
+
+        self.load_started = False
+        self.zone_loaded.setText('-')
+        self.load_end.setText('-')
+        self.load_start.setText('-')
+        self.overall_load_time_value.setText('-')
+        self.load_started_time = None
     
     def select_log(self):
         dialog_file = QFileDialog.getOpenFileName(self, 'Open Log', '.', '*.txt')
