@@ -32,6 +32,7 @@ class ParserThread(QThread):
     def handle_line(self, path):
         roll_pattern = r'\[.+?(?=\])] \*\*It could have been any number from 0 to 1000, but this time it turned up a (\d{1,4}).'
         fte_pattern = r'\[.+?(?=\])] (.+?(?=engages))engages ([a-zA-Z]+)'
+        vindi_string = 'Derakor the Vindicator '
         while True:
             line = self.fp.readline()
             if line:
@@ -42,7 +43,7 @@ class ParserThread(QThread):
                         now = datetime.now(timezone.utc)
                         self.roll_signal.emit(valid_start, now)
                 fte_match = re.match(fte_pattern, line)
-                if fte_match:
+                if fte_match and not fte_match.group(1) == vindi_string:
                     now = datetime.now(timezone.utc)
                     self.fte_signal.emit(fte_match.group(1), fte_match.group(2), now)
             else:
