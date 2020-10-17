@@ -2,7 +2,7 @@
 import re
 import pathlib
 import time
-import winsound
+import os
 from datetime import datetime, timezone
 from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QAction,
                              QFileDialog, QVBoxLayout, QWidget, QHBoxLayout,
@@ -116,7 +116,9 @@ class MainWindow(QMainWindow):
             self.roll.setText(str(roll_value))
             self.roll_time.setText(roll_date.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3])
             self.started_time = roll_date
-            winsound.Beep(1000, 1000)
+            duration = 1  # seconds
+            freq = 1000  # Hz
+            os.system('play -nq -t alsa synth {} sine {}'.format(duration, freq))
             self.started = True
         
     def valid_fte(self, fter, fte_target, fte_time):
